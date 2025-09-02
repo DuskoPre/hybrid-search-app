@@ -18,17 +18,21 @@ touch app/__init__.py
 
 2. **Build and run:**  
 
-make build    *\# Build the container*
+*\# Build the container*
+make build
 
-make setup    *\# Start everything with sample data*
+*\# Start everything with sample data*
+make setup
 
 3. **Test the search:**  
- 
-make test-search  *\# Automated tests*  
+
+*\# Automated tests*
+make test-search  
 
 * *\# OR*
 
-make search      *\# Interactive search*
+*\# Interactive search*
+make search
 
 ## **🔗 FastAPI Endpoints**
 
