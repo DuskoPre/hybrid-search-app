@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  hybrid-search:
+    build: .
+    container_name: hybrid-search-all-in-one
+    ports:
+      - "8000:8000"  # FastAPI
+      - "8983:8983"  # Solr Admin UI
+      - "6379:6379"  # Redis (optional access)
+    volumes:
+      - solr_data:/var/solr/data
+      - redis_data:/data
+    environment:
+      - PYTHONPATH=/app
+      - JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+
+volumes:
+  solr_data:
+  redis_data:
