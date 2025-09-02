@@ -1,9 +1,11 @@
 ## **Architecture Overview**
 
-This is a sophisticated search stack that integrates FastAPI with:
+Hybrid search app with FastAPI as the query interface:
 
-* **Apache Solr** with vector search capabilities  
-* **Learning-to-Rank (LTR)** for intelligent re-ranking  
-* **StormCrawler** for distributed web crawling  
-* **Vector embeddings** using all-MiniLM-L6-v2 model  
-* **Redis** for URL queue management
+**Single Docker Container** that runs:
+
+* ✅ **Solr** with vector search (384-dim, all-MiniLM-L6-v2)  
+* ✅ **Redis** for URL queue management  
+* ✅ **FastAPI** as the main API interface  
+* ✅ **Background web scraping** with automatic vectorization  
+* ✅ **Hybrid search** (BM25 \+ Vector \+ LTR)
