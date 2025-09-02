@@ -13,22 +13,19 @@ Hybrid search app with FastAPI as the query interface:
 ## **🚀 Quick Start Process**
 
 1. **Create project structure:**  
-   bash  
-* mkdir hybrid-search-app && cd hybrid-search-app  
-* mkdir \-p app
 
-touch app/\_\_init\_\_.py
+touch app/__init__.py
 
-2. **Copy all the artifacts I created above into the respective files**  
-3. **Build and run:**  
-   bash  
-* make build    *\# Build the container*
+2. **Build and run:**  
+
+make build    *\# Build the container*
 
 make setup    *\# Start everything with sample data*
 
-4. **Test the search:**  
-   bash  
-* make test-search  *\# Automated tests*  
+3. **Test the search:**  
+ 
+make test-search  *\# Automated tests*  
+
 * *\# OR*
 
 make search      *\# Interactive search*
