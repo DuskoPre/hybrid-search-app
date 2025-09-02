@@ -59,5 +59,45 @@ make search
 The FastAPI app handles all the complexity of communicating with Solr, generating embeddings, and managing the hybrid search logic. You just make simple HTTP requests to get powerful search results\!
 
 * 
+The FastAPI application triggers Solr's re-ranking features, but \_\_only when the \`search\_type\` is set to \`"hybrid"\`\_\_.
 
+Here's a breakdown of how it works:
+
+1\. The main \`/search\` endpoint calls different functions based on the \`search\_type\` parameter.
+
+2\. When \`search\_type\` is \`"hybrid"\`, it calls the \`hybrid\_search\` function.
+
+3\. Inside \`hybrid\_search\`, the request to Solr includes a specific re-ranking parameter \`rq\`:
+
+\`\`\`python
+
+async def hybrid\_search(client: httpx.AsyncClient, request: SearchRequest) \-\> List\[SearchResult\]:
+
+    """Hybrid search with LTR re-ranking"""
+
+    params \= {
+
+        "q": request.query,
+
+        "defType": "edismax",
+
+        "qf": "title^3 content",
+
+        "rq": f"{{\!ltr model=enhanced\_hybrid\_ranker reRankDocs={request.rerank\_docs}}}",
+
+        "rows": request.rows,
+
+        "fl": "id,title,url,content,score,\[features\]"
+
+    }
+
+    \# ...
+
+\`\`\`
+
+The key part is \`"rq": f"{{\!ltr model=enhanced\_hybrid\_ranker ...}}"\`. The \`rq\` parameter tells Solr to execute a subsequent re-ranking query on the initial results. In this case, it uses the Learning to Rank (\`ltr\`) model named \`enhanced\_hybrid\_ranker\`.
+
+The other search types, \`bm25\` and \`vector\`, do \_\_not\_\_ include this \`rq\` parameter, so they return the results directly from their respective search algorithms without a re-ranking step.
+
+*
 
