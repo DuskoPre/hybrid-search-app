@@ -9,3 +9,50 @@ Hybrid search app with FastAPI as the query interface:
 * ✅ **FastAPI** as the main API interface  
 * ✅ **Background web scraping** with automatic vectorization  
 * ✅ **Hybrid search** (BM25 \+ Vector \+ LTR)
+
+## **🚀 Quick Start Process**
+
+1. **Create project structure:**  
+   bash  
+* mkdir hybrid-search-app && cd hybrid-search-app  
+* mkdir \-p app
+
+touch app/\_\_init\_\_.py
+
+2. **Copy all the artifacts I created above into the respective files**  
+3. **Build and run:**  
+   bash  
+* make build    *\# Build the container*
+
+make setup    *\# Start everything with sample data*
+
+4. **Test the search:**  
+   bash  
+* make test-search  *\# Automated tests*  
+* *\# OR*
+
+make search      *\# Interactive search*
+
+## **🔗 FastAPI Endpoints**
+
+* **`POST /search`** \- Main search with 3 modes (BM25, vector, hybrid)  
+* **`POST /scrape`** \- Add URLs to scrape and auto-index  
+* **`POST /index`** \- Manually index documents  
+* **`GET /stats`** \- Collection statistics  
+* **`GET /health`** \- Service health check  
+* **`GET /`** \- API documentation
+
+  ## **🎁 Key Advantages**
+
+ ✅ **Simple**: One container  
+ ✅ **FastAPI Interface**: Clean REST API instead of direct Solr queries  
+ ✅ **Automatic Setup**: `make setup` does everything  
+ ✅ **Built-in Scraper**: No need for complex StormCrawler setup  
+ ✅ **Real Embeddings**: Uses actual all-MiniLM-L6-v2 model  
+ ✅ **Production Ready**: Includes health checks, logging, error handling
+
+The FastAPI app handles all the complexity of communicating with Solr, generating embeddings, and managing the hybrid search logic. You just make simple HTTP requests to get powerful search results\!
+
+* 
+
+
