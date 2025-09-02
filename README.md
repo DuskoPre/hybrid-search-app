@@ -1,6 +1,6 @@
 ## **Architecture Overview**
 
-This is a sophisticated search stack that integrates:
+This is a sophisticated search stack that integrates FastAPI with:
 
 * **Apache Solr** with vector search capabilities  
 * **Learning-to-Rank (LTR)** for intelligent re-ranking  
