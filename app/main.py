@@ -37,7 +37,7 @@ app.add_middleware(
 # Global variables
 model = None
 redis_client = None
-solr_base_url = "http://localhost:8983/solr/hybrid_search"
+solr_base_url = "http://solr:8983/solr/hybrid_search"
 
 # Pydantic models
 class SearchRequest(BaseModel):
@@ -81,7 +81,13 @@ async def startup_event():
     logger.info("✅ Model loaded successfully!")
     
     # Connect to Redis
-    redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
+    try:
+        redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
+        redis_client.ping()
+        logger.info("✅ Redis connected!")
+    except Exception as e:
+        logger.error(f"❌ Redis connection failed: {str(e)}")
+        redis_client = None
     
     # Wait for Solr to be ready
     await wait_for_solr()
@@ -98,8 +104,8 @@ async def wait_for_solr():
                 if response.status_code == 200:
                     logger.info("✅ Solr is ready!")
                     return
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"Solr not ready yet: {str(e)}")
         logger.info(f"⏳ Waiting for Solr... ({i+1}/{max_retries})")
         await asyncio.sleep(10)
     
@@ -123,8 +129,11 @@ async def health_check():
     
     # Check Redis
     try:
-        redis_client.ping()
-        health_status["services"]["redis"] = "healthy"
+        if redis_client:
+            redis_client.ping()
+            health_status["services"]["redis"] = "healthy"
+        else:
+            health_status["services"]["redis"] = "unhealthy"
     except:
         health_status["services"]["redis"] = "unhealthy"
     
@@ -138,6 +147,9 @@ async def health_check():
 async def generate_embedding(text: str):
     """Generate vector embedding for text"""
     try:
+        if not model:
+            raise HTTPException(status_code=503, detail="Embedding model not loaded")
+        
         embedding = model.encode([text])[0].tolist()
         return {
             "embedding": embedding,
@@ -160,7 +172,8 @@ async def search(request: SearchRequest):
             elif request.search_type == "vector":
                 results = await vector_search(client, request)
             elif request.search_type == "hybrid":
-                results = await hybrid_search(client, request)
+                # For hybrid, we'll do a simple combination since LTR model may not exist
+                results = await hybrid_search_fallback(client, request)
             else:
                 raise HTTPException(status_code=400, detail="Invalid search_type. Use: bm25, vector, or hybrid")
         
@@ -205,6 +218,9 @@ async def bm25_search(client: httpx.AsyncClient, request: SearchRequest) -> List
 
 async def vector_search(client: httpx.AsyncClient, request: SearchRequest) -> List[SearchResult]:
     """Pure vector semantic search"""
+    if not model:
+        raise HTTPException(status_code=503, detail="Embedding model not loaded")
+    
     # Generate query embedding
     embedding = model.encode([request.query])[0].tolist()
     embedding_str = json.dumps(embedding)
@@ -229,46 +245,61 @@ async def vector_search(client: httpx.AsyncClient, request: SearchRequest) -> Li
         for doc in data["response"]["docs"]
     ]
 
-async def hybrid_search(client: httpx.AsyncClient, request: SearchRequest) -> List[SearchResult]:
-    """Hybrid search with LTR re-ranking"""
-    params = {
-        "q": request.query,
-        "defType": "edismax",
-        "qf": "title^3 content",
-        "rq": f"{{!ltr model=enhanced_hybrid_ranker reRankDocs={request.rerank_docs}}}",
-        "rows": request.rows,
-        "fl": "id,title,url,content,score,[features]"
-    }
+async def hybrid_search_fallback(client: httpx.AsyncClient, request: SearchRequest) -> List[SearchResult]:
+    """Simple hybrid search without LTR - more reliable fallback"""
+    # Fallback to simple combination of BM25 and vector search
+    return await simple_hybrid_search(client, request)
+
+async def simple_hybrid_search(client: httpx.AsyncClient, request: SearchRequest) -> List[SearchResult]:
+    """Simple hybrid search combining BM25 and vector results"""
+    # Get BM25 results
+    bm25_results = await bm25_search(client, SearchRequest(
+        query=request.query, 
+        search_type="bm25", 
+        rows=request.rerank_docs
+    ))
     
-    response = await client.get(f"{solr_base_url}/select", params=params)
-    response.raise_for_status()
-    data = response.json()
+    # Get vector results
+    vector_results = await vector_search(client, SearchRequest(
+        query=request.query, 
+        search_type="vector", 
+        rows=request.rerank_docs
+    ))
     
-    results = []
-    for doc in data["response"]["docs"]:
-        features = None
-        if "[features]" in doc:
-            try:
-                features = json.loads(doc["[features]"])
-            except:
-                features = None
-        
-        results.append(SearchResult(
-            id=doc["id"],
-            title=doc.get("title", [""])[0] if isinstance(doc.get("title"), list) else doc.get("title", ""),
-            url=doc.get("url", ""),
-            content=doc.get("content", [""])[0] if isinstance(doc.get("content"), list) else doc.get("content", "")[:200] + "...",
-            score=doc["score"],
-            features=features
-        ))
+    # Simple score combination (normalize and combine)
+    combined_results = {}
     
-    return results
+    # Normalize BM25 scores
+    if bm25_results:
+        max_bm25 = max(r.score for r in bm25_results)
+        for result in bm25_results:
+            result.score = result.score / max_bm25 if max_bm25 > 0 else 0
+            combined_results[result.id] = result
+    
+    # Normalize vector scores and combine
+    if vector_results:
+        max_vector = max(r.score for r in vector_results)
+        for result in vector_results:
+            normalized_score = result.score / max_vector if max_vector > 0 else 0
+            if result.id in combined_results:
+                # Combine scores (0.6 BM25 + 0.4 vector)
+                combined_results[result.id].score = 0.6 * combined_results[result.id].score + 0.4 * normalized_score
+            else:
+                result.score = 0.4 * normalized_score
+                combined_results[result.id] = result
+    
+    # Sort by combined score and return top results
+    final_results = sorted(combined_results.values(), key=lambda x: x.score, reverse=True)
+    return final_results[:request.rows]
 
 # Add URLs to crawl queue
 @app.post("/crawl")
 async def add_crawl_urls(request: CrawlRequest):
     """Add URLs to the crawl queue"""
     try:
+        if not redis_client:
+            raise HTTPException(status_code=503, detail="Redis not available")
+        
         added_count = 0
         for url in request.urls:
             redis_client.lpush("crawl.queue", url)
@@ -289,6 +320,9 @@ async def add_crawl_urls(request: CrawlRequest):
 async def index_document(doc: IndexDocument):
     """Manually index a document with automatic vector generation"""
     try:
+        if not model:
+            raise HTTPException(status_code=503, detail="Embedding model not loaded")
+        
         # Generate embedding for content
         embedding = model.encode([doc.content])[0].tolist()
         
@@ -346,7 +380,12 @@ async def get_stats():
             doc_count = response.json()["response"]["numFound"]
             
             # Get queue length
-            queue_length = redis_client.llen("crawl.queue")
+            queue_length = 0
+            if redis_client:
+                try:
+                    queue_length = redis_client.llen("crawl.queue")
+                except:
+                    queue_length = 0
             
             return {
                 "documents_indexed": doc_count,
@@ -373,13 +412,14 @@ async def scrape_urls_task(urls: List[str]):
         try:
             logger.info(f"🌐 Scraping: {url}")
             
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=30.0, headers={"User-Agent": "Mozilla/5.0 (compatible; HybridSearchBot/1.0)"}) as client:
                 response = await client.get(url)
                 response.raise_for_status()
                 
                 # Parse HTML content
                 soup = BeautifulSoup(response.text, 'html.parser')
                 title = soup.title.string if soup.title else "Untitled"
+                title = title.strip()
                 
                 # Extract text content
                 for script in soup(["script", "style"]):
@@ -391,10 +431,11 @@ async def scrape_urls_task(urls: List[str]):
                     logger.warning(f"⚠️ Insufficient content for {url}")
                     continue
                 
-                # Index the document
-                doc = IndexDocument(url=url, title=title, content=content)
-                
                 # Generate embedding
+                if not model:
+                    logger.error("❌ Embedding model not available")
+                    continue
+                
                 embedding = model.encode([content])[0].tolist()
                 domain = urlparse(url).netloc
                 doc_id = re.sub(r'[^a-zA-Z0-9]', '_', url)

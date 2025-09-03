@@ -1,25 +1,67 @@
-version: '3.8'
-
 services:
-  hybrid-search:
-    build: .
-    container_name: hybrid-search-all-in-one
-    ports:
-      - "8000:8000"  # FastAPI
-      - "8983:8983"  # Solr Admin UI
-      - "6379:6379"  # Redis (optional access)
+  # Init container to fix permissions
+  solr-init:
+    image: solr:9.4.1
+    user: root
     volumes:
       - solr_data:/var/solr/data
-      - redis_data:/data
+    command: >
+      bash -c "
+        chown -R 8983:8983 /var/solr/data
+        mkdir -p /var/solr/data/hybrid_search
+        chown -R 8983:8983 /var/solr/data/hybrid_search
+      "
+    restart: "no"
+
+  solr:
+    image: solr:9.4.1
+    container_name: hybrid-search-solr
+    ports:
+      - "8983:8983"
+    volumes:
+      - solr_data:/var/solr/data
     environment:
-      - PYTHONPATH=/app
-      - JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+      - SOLR_HEAP=1g
+    user: "8983:8983"
+    depends_on:
+      - solr-init
+    command: >
+      bash -c "
+        solr-foreground -force &
+        SOLR_PID=$$!
+        sleep 30
+        solr create_core -c hybrid_search -force || true
+        wait $$SOLR_PID
+      "
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8983/solr/admin/ping"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 120s
+      start_period: 60s
+
+  redis:
+    image: redis:alpine
+    container_name: hybrid-search-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+  hybrid-search:
+    build: .
+    container_name: hybrid-search-app
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+    depends_on:
+      solr:
+        condition: service_healthy
+      redis:
+        condition: service_started
     restart: unless-stopped
 
 volumes:

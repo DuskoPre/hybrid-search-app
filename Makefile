@@ -3,33 +3,30 @@
 # Build and start the single container
 build:
 	@echo "🔨 Building hybrid search container..."
-	docker-compose build
+	docker compose build
 
 # Start the all-in-one container
 up:
 	@echo "🚀 Starting hybrid search stack..."
-	docker-compose up -d
+	docker compose up -d
 	@echo "⏳ Waiting for services to initialize (2-3 minutes for model loading)..."
 	@echo "📊 Check status with: make status"
 
 # Complete setup with sample data
 setup: up
 	@echo "⏳ Waiting for services to be ready..."
-	@sleep 60
-	@echo "🔧 Setting up Solr collection..."
-	@docker exec hybrid-search-all-in-one /app/setup-solr.sh
 	@echo "📝 Adding sample Wikipedia content..."
 	@make scrape-sample
 	@echo ""
 	@echo "🎉 Hybrid search stack is ready!"
 	@echo "📊 FastAPI: http://localhost:8000"
-	@echo "📊 Solr UI: http://localhost:8983"
+	@echo "📊 Solr UI: http://localhost:8000"
 	@echo "🔍 Try: make test-search"
 
 # Stop the container
 down:
 	@echo "🛑 Stopping hybrid search stack..."
-	docker-compose down
+	docker compose down
 
 # Add sample Wikipedia content
 scrape-sample:
@@ -65,7 +62,7 @@ test-search:
 status:
 	@echo "📊 === HYBRID SEARCH STATUS ==="
 	@echo ""
-	@docker-compose ps
+	@docker compose ps
 	@echo ""
 	@echo "📈 Collection Statistics:"
 	@curl -s "http://localhost:8000/stats" | jq '.'
@@ -76,12 +73,12 @@ status:
 # View logs from all services
 logs:
 	@echo "📋 Viewing container logs..."
-	docker-compose logs -f --tail 50
+	docker compose logs -f --tail 50
 
 # Clean everything
 clean: down
 	@echo "🧹 Cleaning up all data..."
-	docker-compose down -v
+	docker compose down -v
 	docker system prune -f
 	@echo "✅ Cleanup complete!"
 

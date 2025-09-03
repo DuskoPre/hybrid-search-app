@@ -2,11 +2,11 @@
 
 Hybrid search app with FastAPI as the query interface:
 
-**Single Docker Container** that runs:
+**Docker Compose** that runs:
 
-* ✅ **Solr** with vector search (384-dim, all-MiniLM-L6-v2)  
-* ✅ **Redis** for URL queue management  
-* ✅ **FastAPI** as the main API interface  
+* ✅ **Solr** with vector search (384-dim, all-MiniLM-L6-v2) in a separate container  
+* ✅ **Redis** for URL queue management in a separate container  
+* ✅ **FastAPI** as the main API interface in its own container  
 * ✅ **Background web scraping** with automatic vectorization  
 * ✅ **Hybrid search** (BM25 \+ Vector \+ LTR)
 
@@ -18,7 +18,7 @@ touch app/__init__.py
 
 2. **Build and run:**  
 
-*\# Build the container*
+*\# Build the containers*
 
 make build
 
@@ -49,7 +49,7 @@ make search
 
   ## **🎁 Key Advantages**
 
- ✅ **Simple**: One container  
+ ✅ **Modular**: Separate containers for each service  
  ✅ **FastAPI Interface**: Clean REST API instead of direct Solr queries  
  ✅ **Automatic Setup**: `make setup` does everything  
  ✅ **Built-in Scraper**: No need for complex StormCrawler setup  
@@ -100,4 +100,3 @@ The key part is \`"rq": f"{{\!ltr model=enhanced\_hybrid\_ranker ...}}"\`. The \
 The other search types, \`bm25\` and \`vector\`, do \_\_not\_\_ include this \`rq\` parameter, so they return the results directly from their respective search algorithms without a re-ranking step.
 
 *
-
